@@ -19,10 +19,15 @@
   },
   "dependencies": {
     "@prisma/client": "^5.12.1",
+    "circular-json": "^0.5.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-async-handler": "^1.2.0",
-    "http": "^0.0.1-security"
+    "fs-extra": "^11.2.0",
+    "http": "^0.0.1-security",
+    "solc": "^0.8.25",
+    "truffle-hdwallet-provider": "^1.0.17",
+    "web3": "^4.7.0"
   }
 }

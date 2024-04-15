@@ -4,6 +4,8 @@ import http from "http";
 import { configDotenv } from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import middleware from "./middleware";
+const compile = require('./ethereum/compile');
+const deploy = require('./ethereum/deploy');
 
 configDotenv();
 
@@ -34,4 +36,18 @@ app.post("/users", async (req, res) => {
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
+});
+
+app.post("/compile", async (req, res) => {
+  try {
+    const compiled = compile();
+    res.json(compiled);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/deploy", async (req, res) => {
+  const result = await deploy();
+  res.send(JSON.parse(result).address);
 });
