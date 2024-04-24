@@ -1,7 +1,14 @@
+# Use a base image with Node.js installed
 FROM node:alpine
 
-WORKDIR /app
-
+# Install ganache globally
 RUN npm install -g ganache
 
-CMD ["ganache", "--host", "0.0.0.0"]
+# Set the working directory
+WORKDIR /app
+
+# Copy your data directory if needed
+# COPY ./data/save /app/data/save
+
+# Set the command to run ganache with your desired options
+CMD ["ganache", "-i=1337", "--mnemonic=swim lab spawn angle cigar victory syrup radar cupboard crisp erase dizzy", "--host", "0.0.0.0"]
