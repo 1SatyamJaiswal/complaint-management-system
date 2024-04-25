@@ -2,11 +2,14 @@ import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-const {web3} = require('../ethereum/web3');
+import axios from "axios";
+import multer from "multer";
+const { web3 } = require('../ethereum/web3');
 const receiptJson = require('../ethereum/receipt-ganache.json');
-const contract = require('../ethereum/build/ComplaintSystem.json');
 
 const prisma = new PrismaClient();
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 const getContractObject = () => {
     const contractObject = new web3.eth.Contract(
@@ -31,11 +34,11 @@ export const register = async (req: Request, res: Response) => {
                 isAdmin,
             },
         });
-        if(isAdmin) {
-            const receipt = await contractObject.methods.registerAdmin(walletAddress).send({from: walletAddress});
+        if (isAdmin) {
+            const receipt = await contractObject.methods.registerAdmin(walletAddress).send({ from: walletAddress });
             console.log(receipt);
         } else {
-            const receipt = await contractObject.methods.registerUser(walletAddress).send({from: walletAddress});
+            const receipt = await contractObject.methods.registerUser(walletAddress).send({ from: walletAddress });
             console.log(receipt);
         }
         res.json(user);
@@ -61,3 +64,69 @@ export const login = async (req: Request, res: Response) => {
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!);
     res.json({ token, user });
 };
+
+export const createComplaint = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user) {
+            return res.status(400).json({ error: "User not found" });
+        }
+
+        // Access the uploaded file from req.file
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const { fileName, description } = req.body;
+
+        // Create FormData object
+        const formData = new FormData();
+        const fileBlob = new Blob([file.buffer]);
+        formData.append("file", fileBlob, fileName);
+        const pinataMetadata = JSON.stringify({
+            name: fileName,
+        });
+        formData.append("pinataMetadata", pinataMetadata);
+
+        const pinataOptions = JSON.stringify({
+            cidVersion: 1,
+        });
+        formData.append("pinataOptions", pinataOptions);
+
+        // Make a POST request to upload the file
+        const response = await axios.post(
+            "https://api.pinata.cloud/pinning/pinFileToIPFS",
+            formData,
+            {
+                headers: {
+                    "Authorization": `Bearer ${process.env.PINATA_JWT}`,
+                },
+            }
+        );
+        const pinataIpfsHash = response.data.IpfsHash;
+
+        // Use the smart contract function to create a complaint
+        const contractObject = getContractObject();
+        const receipt = await contractObject.methods.createComplaint(pinataIpfsHash, description, fileName).send({ from: user.walletAddress });
+
+        res.json({ message: "Complaint created successfully" });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    } 
+};
+
+
+
+
