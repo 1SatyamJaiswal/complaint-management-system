@@ -11,19 +11,15 @@ const prisma = new PrismaClient();
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-const getContractObject = () => {
-    const contractObject = new web3.eth.Contract(
-        receiptJson.jsonInterface,
-        receiptJson.address
-    );
-
-    return contractObject;
-}
+const contractObject = new web3.eth.Contract(
+    receiptJson.jsonInterface,
+    receiptJson.address
+);
 
 export const register = async (req: Request, res: Response) => {
     const { email, name, password, walletAddress, isAdmin } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
-    const contractObject = getContractObject();
+
     try {
         const user = await prisma.user.create({
             data: {
@@ -117,14 +113,220 @@ export const createComplaint = async (req: Request, res: Response) => {
         const pinataIpfsHash = response.data.IpfsHash;
 
         // Use the smart contract function to create a complaint
-        const contractObject = getContractObject();
-        const receipt = await contractObject.methods.createComplaint(pinataIpfsHash, description, fileName).send({ from: user.walletAddress });
+
+        const receipt = await contractObject.methods.createComplaint(pinataIpfsHash, description, fileName).send({ from: user.walletAddress, gas: 3000000 });
 
         res.json({ message: "Complaint created successfully" });
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ error: "Internal server error" });
-    } 
+    }
+};
+
+export const getUserComplaints = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user) {
+            return res.status(400).json({ error: "User not found" });
+        }
+
+        const complaints = await contractObject.methods.getUserComplaints(user.walletAddress).call();
+        const complaintsData = await Promise.all(complaints.map(async (complaint: any) => {
+            const transactions = await contractObject.methods.getTransactionsById(complaint.id).call();
+            const replies = await contractObject.methods.getRepliesById(complaint.id).call();
+
+            const transactionsData = await Promise.all(transactions.map(async (transaction: any) => {
+                return {
+                    accessor: transaction.accessor,
+                    timestamp: Number(transaction.timestamp),
+                    action: transaction.action
+                };
+            }));
+
+            const repliesData = await Promise.all(replies.map(async (reply: any) => {
+                return {
+                    senderAddress: reply.senderAddress,
+                    timestamp: Number(reply.timestamp),
+                    reply: reply.replyText
+                };
+            }));
+
+            return {
+                id: Number(complaint.id),
+                complainant: complaint.complainant,
+                description: complaint.description,
+                status: Number(complaint.status),
+                file: {
+                    ipfsHash: complaint.file.ipfsHash,
+                    name: complaint.file.name
+                },
+                timestamp: Number(complaint.timestamp),
+                transactions: transactionsData,
+                replies: repliesData
+            };
+        }));
+
+        // Now you can send the response
+        res.json(complaintsData);
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+export const getUnresolvedComplaints = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user?.isAdmin) {
+            return res.status(400).json({ error: "Cannot access the complaints" });
+        }
+
+        const complaints = await contractObject.methods.getUnresolvedComplaints().call({ from: user.walletAddress });
+        const complaintsData = await Promise.all(complaints.map(async (complaint: any) => {
+            const transactions = await contractObject.methods.getTransactionsById(complaint.id).call();
+            const replies = await contractObject.methods.getRepliesById(complaint.id).call();
+
+            const transactionsData = await Promise.all(transactions.map(async (transaction: any) => {
+                return {
+                    accessor: transaction.accessor,
+                    timestamp: Number(transaction.timestamp),
+                    action: transaction.action
+                };
+            }));
+
+            const repliesData = await Promise.all(replies.map(async (reply: any) => {
+                return {
+                    senderAddress: reply.senderAddress,
+                    timestamp: Number(reply.timestamp),
+                    reply: reply.replyText
+                };
+            }));
+
+            return {
+                id: Number(complaint.id),
+                complainant: complaint.complainant,
+                description: complaint.description,
+                status: Number(complaint.status),
+                file: {
+                    ipfsHash: complaint.file.ipfsHash,
+                    name: complaint.file.name
+                },
+                timestamp: Number(complaint.timestamp),
+                transactions: transactionsData,
+                replies: repliesData
+            };
+        }));
+
+        // Now you can send the response
+        res.json(complaintsData);
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+export const resolveComplaint = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user?.isAdmin) {
+            return res.status(400).json({ error: "Cannot resolve the complaint" });
+        }
+
+        const { complaintId, responseText } = req.body;
+
+        const receipt = await contractObject.methods.resolveComplaint(complaintId, responseText).send({ from: user.walletAddress, gas: 3000000 });
+
+        res.json({ message: "Complaint resolved successfully" });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+export const replyComplaint = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user) {
+            return res.status(400).json({ error: "User not found" });
+        }
+
+        const { complaintId, replyText } = req.body;
+
+        const receipt = await contractObject.methods.replyToComplaint(complaintId, replyText).send({ from: user.walletAddress, gas: 3000000 });
+
+        res.json({ message: "Complaint replied successfully" });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+export const accessComplaint = async (req: Request, res: Response) => {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(401).json({ error: "Token not provided" });
+    }
+    try {
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+        const { id } = decoded;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: id,
+            },
+        });
+        if (!user?.isAdmin) {
+            return res.status(400).json({ error: "Cannot access the complaint" });
+        }
+
+        const { complaintId } = req.body;
+
+        const receipt = await contractObject.methods.accessComplaint(complaintId).send({ from: user.walletAddress, gas: 3000000 });
+
+        res.json({ message: "Complaint accessed successfully" });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
 };
 
 

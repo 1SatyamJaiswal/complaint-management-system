@@ -15,7 +15,7 @@ COPY prisma ./prisma
 COPY .env ./
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN npx prisma migrate dev --name init
 
 # Copy the rest of the application code
 COPY . .

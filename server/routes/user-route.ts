@@ -1,5 +1,5 @@
 import multer from "multer";
-import { register, login, createComplaint } from "../controllers/user-controller";
+import { register, login, createComplaint, getUserComplaints, getUnresolvedComplaints, resolveComplaint, replyComplaint, accessComplaint } from "../controllers/user-controller";
 import express from "express";
 
 const storage = multer.memoryStorage();
@@ -10,5 +10,10 @@ const userRoutes = express.Router();
 userRoutes.post("/register", register);
 userRoutes.post("/login", login);
 userRoutes.post("/complaint", upload.single("file"), createComplaint);
+userRoutes.get("/complaints", getUserComplaints);
+userRoutes.get("/unresolved-complaints", getUnresolvedComplaints);
+userRoutes.post("/resolve-complaint", resolveComplaint);
+userRoutes.post("/reply-complaint", replyComplaint);
+userRoutes.post("/access-complaint", accessComplaint);
 
 export default userRoutes;
