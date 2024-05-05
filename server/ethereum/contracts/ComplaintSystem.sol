@@ -83,7 +83,7 @@ contract ComplaintSystem {
         _addTransaction(_complaintId, msg.sender, Action.Access);
     }
 
-    function replyToComplaint(uint256 _complaintId, string memory _replyText) external onlyAdmin {
+    function replyToComplaint(uint256 _complaintId, string memory _replyText) external {
         replies[_complaintId].push(Reply(msg.sender, _replyText, block.timestamp));
         emit TransactionAdded(_complaintId, msg.sender, Action.Reply, block.timestamp);
     }
@@ -150,5 +150,9 @@ contract ComplaintSystem {
 
     function getRepliesById(uint256 _complaintId) external view returns (Reply[] memory) {
         return replies[_complaintId];
+    }
+
+    function getComplaintById(uint256 _complaintId) external view returns (Complaint memory) {
+        return complaints[_complaintId];
     }
 }

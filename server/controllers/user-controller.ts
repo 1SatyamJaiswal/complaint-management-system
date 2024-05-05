@@ -262,9 +262,9 @@ export const resolveComplaint = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Cannot resolve the complaint" });
         }
 
-        const { complaintId, responseText } = req.body;
+        const { id: complaintId } = req.params;
 
-        const receipt = await contractObject.methods.resolveComplaint(complaintId, responseText).send({ from: user.walletAddress, gas: 3000000 });
+        const receipt = await contractObject.methods.resolveComplaint(complaintId, "").send({ from: user.walletAddress, gas: 3000000 });
 
         res.json({ message: "Complaint resolved successfully" });
     } catch (error: any) {
@@ -290,7 +290,9 @@ export const replyComplaint = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "User not found" });
         }
 
-        const { complaintId, replyText } = req.body;
+        const { id: complaintId } = req.params;
+        const { replyText } = req.body;
+        console.log(req.body);
 
         const receipt = await contractObject.methods.replyToComplaint(complaintId, replyText).send({ from: user.walletAddress, gas: 3000000 });
 
@@ -314,15 +316,60 @@ export const accessComplaint = async (req: Request, res: Response) => {
                 id: id,
             },
         });
-        if (!user?.isAdmin) {
-            return res.status(400).json({ error: "Cannot access the complaint" });
+
+        if (!user) {
+            return res.status(400).json({ error: "User not found" });
         }
 
-        const { complaintId } = req.body;
+        const { id: complaintId } = req.params;
 
         const receipt = await contractObject.methods.accessComplaint(complaintId).send({ from: user.walletAddress, gas: 3000000 });
 
         res.json({ message: "Complaint accessed successfully" });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+export const complaintById = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const complaint = await contractObject.methods.getComplaintById(id).call();
+        const transactions = await contractObject.methods.getTransactionsById(id).call();
+        const replies = await contractObject.methods.getRepliesById(id).call();
+
+        const transactionsData = await Promise.all(transactions.map(async (transaction: any) => {
+            return {
+                accessor: transaction.accessor,
+                timestamp: Number(transaction.timestamp),
+                action: transaction.action
+            };
+        }));
+
+        const repliesData = await Promise.all(replies.map(async (reply: any) => {
+            return {
+                senderAddress: reply.senderAddress,
+                timestamp: Number(reply.timestamp),
+                reply: reply.replyText
+            };
+        }));
+
+        const complaintData = {
+            id: Number(complaint.id),
+            complainant: complaint.complainant,
+            description: complaint.description,
+            status: Number(complaint.status),
+            file: {
+                ipfsHash: complaint.file.ipfsHash,
+                name: complaint.file.name
+            },
+            timestamp: Number(complaint.timestamp),
+            transactions: transactionsData,
+            replies: repliesData
+        };
+
+        res.json(complaintData);
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ error: "Internal server error" });

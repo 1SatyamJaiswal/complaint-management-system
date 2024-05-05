@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { toast, ToastContainer } from "react-toastify";
-import CreateModal from "@/components/CreateModal";
 import Link from "next/link";
 
 const Profile = () => {
@@ -21,7 +20,7 @@ const Profile = () => {
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/user/complaints`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/user/unresolved-complaints`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -71,27 +70,27 @@ const Profile = () => {
             <div className="card-body">
               <h2 className="card-title">
                 {user.name}
-                <div className="badge badge-secondary">
+                <div className="badge badge-primary">
                   {user.isAdmin ? `Admin` : `User`}
                 </div>
               </h2>
               <p>{user.email}</p>
             </div>
           </div>
-          {user.isAdmin ? null : (<CreateModal onComplaintCreated={handleComplaintCreated} />)}
           <ToastContainer />
           {userComplaints.length > 0 ? (
             <>
-              <h1 className="text-2xl">Complaints raised</h1>
+              <h1 className="text-2xl">Unresolved Complaints</h1>
               <div className="overflow-x-auto min-w-screen px-10">
                 <table className="table">
                   <thead>
                     <tr>
                       <th>ID</th>
+                      <th>Complainant</th>
                       <th>Description</th>
                       <th>Status</th>
                       <th>File</th>
-                      <th>Created On</th>
+                      <th>Timestamp</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -100,6 +99,7 @@ const Profile = () => {
                     {userComplaints.map((item, index) => (
                       <tr key={index}>
                         <td>{item.id}</td>
+                        <td>{item.complainant}</td>
                         <td
                           style={{
                             whiteSpace: "nowrap",
@@ -134,7 +134,7 @@ const Profile = () => {
               </div>
             </>
           ) : (
-            <h1 className="text-2xl">No complaints raised</h1>
+            <h1 className="text-2xl">No unresolved complaints</h1>
           )}
         </>
       )}
